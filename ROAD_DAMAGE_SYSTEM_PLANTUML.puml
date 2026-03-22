@@ -1,0 +1,571 @@
+@startuml Road_Damage_System_Architecture
+!theme plain
+title Road Damage Reporting System - System Architecture
+
+package "Frontend (React + Vite)" {
+  [Home Page] as Home
+  [Authentication] as Auth
+  [User Dashboard] as UserDash
+  [Municipal Dashboard] as MunicipalDash
+  [Admin Dashboard] as AdminDash
+  [Report Damage] as ReportForm
+  [Track Complaints] as TrackForm
+  [PDF Generation] as PDFGen
+}
+
+package "Backend (Node.js + Express)" {
+  [API Gateway] as API
+  [Authentication Middleware] as AuthMW
+  [Report Routes] as ReportRoutes
+  [User Routes] as UserRoutes
+  [Email Service] as EmailSvc
+}
+
+package "Database (MySQL)" {
+  [Users Table] as UsersDB
+  [Reports Table] as ReportsDB
+  [Status History] as StatusDB
+}
+
+package "External Services" {
+  [Gmail SMTP] as Gmail
+  [AI Analysis Engine] as AI
+}
+
+Home --> API
+Auth --> AuthMW
+ReportForm --> ReportRoutes
+TrackForm --> ReportRoutes
+UserDash --> UserRoutes
+MunicipalDash --> ReportRoutes
+AdminDash --> ReportRoutes
+
+API --> UsersDB
+API --> ReportsDB
+ReportRoutes --> StatusDB
+EmailSvc --> Gmail
+ReportForm --> AI
+PDFGen --> ReportForm
+
+@enduml
+
+@startuml User_Authentication_Flow
+!theme plain
+title User Authentication & Authorization Flow
+
+start
+
+:User Access System;
+
+if (Authenticated?) then (No)
+  :Show Login/Register Page;
+  
+  if (New User?) then (Yes)
+    :Registration Form;
+    :Email Verification;
+    :Account Activated;
+  else (No)
+    :Login Form;
+    if (Valid Credentials?) then (No)
+      :Login Failed;
+      stop
+    endif
+  endif
+  
+  :Generate JWT Token;
+endif
+
+:Check User Role;
+
+if (User Type?) then (Citizen)
+  :Citizen Dashboard;
+elseif (Municipal) then
+  :Municipal Dashboard;
+else (Admin)
+  :Admin Dashboard;
+endif
+
+stop
+
+@enduml
+
+@startuml Report_Submission_Workflow
+!theme plain
+title Report Submission Workflow
+
+start
+
+:Citizen Login;
+:Navigate to Report Damage Page;
+
+:Upload Road Image;
+if (Image Valid?) then (No)
+  :Show Error Message;
+  stop
+endif
+
+:Image Compression & Validation;
+:Fill Location Details;
+:Select State/District/City;
+:Capture GPS Coordinates;
+:Add Description (Optional);
+
+if (Send to Ward Member?) then (Yes)
+  :Select Ward Member;
+endif
+
+:Submit Report;
+
+partition "AI Analysis" {
+  :Process Image;
+  :Detect Damage Type;
+  :Assess Severity;
+  :Estimate Cost;
+  :Calculate Risk Level;
+}
+
+:Generate Complaint ID;
+:Save to Database;
+:Generate PDF Report;
+:Show Success Page;
+:Download PDF Option;
+
+stop
+
+@enduml
+
+@startuml Municipal_Workflow_Process
+!theme plain
+title Municipal Member Workflow Process
+
+start
+
+:Municipal Member Login;
+:View Dashboard;
+:Select Report to Review;
+
+:Check Current Status;
+
+switch (Report Status?)
+case (Submitted)
+  :Step 1: Review & Approve;
+  :Update Status to "Approved";
+case (Approved)
+  :Step 2: Assign Team;
+  :Update Status to "Assigned";
+case (Assigned)
+  :Step 3: Start Work;
+  :Update Status to "In Progress";
+case (In Progress)
+  :Step 4: Mark Resolved;
+  :Update Status to "Completed";
+case (Completed)
+  :Step 5: Close Report;
+  :Update Status to "Closed";
+endswitch
+
+:Send Email Notification;
+:Update Database;
+:Refresh Dashboard;
+
+note right
+  Alternative Actions:
+  - Reject Report (any time)
+  - Mark as Delayed (during work)
+  - Export PDF Report
+end note
+
+stop
+
+@enduml
+
+@startuml Database_Schema
+!theme plain
+title Database Schema - Entity Relationship Diagram
+
+entity "Users" as users {
+  * id : INT <<PK>>
+  --
+  * firstName : VARCHAR(50)
+  * lastName : VARCHAR(50)
+  * email : VARCHAR(100) <<UK>>
+  * password : VARCHAR(255)
+  * phone : VARCHAR(15)
+  * userType : ENUM('citizen', 'municipal', 'admin')
+  * ward : VARCHAR(50)
+  * isActive : BOOLEAN
+  * isEmailVerified : BOOLEAN
+  * emailVerificationToken : VARCHAR(255)
+  * passwordResetToken : VARCHAR(255)
+  * passwordResetExpires : DATETIME
+  * createdAt : DATETIME
+  * updatedAt : DATETIME
+}
+
+entity "Reports" as reports {
+  * id : INT <<PK>>
+  --
+  * complaintId : VARCHAR(20) <<UK>>
+  * userId : INT <<FK>>
+  * locationAddress : TEXT
+  * latitude : DECIMAL(10,8)
+  * longitude : DECIMAL(11,8)
+  * damageType : VARCHAR(50)
+  * severity : ENUM('low', 'medium', 'high')
+  * description : TEXT
+  * aiAnalysis : JSON
+  * images : JSON
+  * status : ENUM('Submitted', 'Under Review', 'Approved', 'Assigned', 'In Progress', 'Delayed', 'Completed', 'Closed', 'Rejected')
+  * priority : ENUM('Low', 'Medium', 'High', 'Urgent')
+  * assignedToId : INT <<FK>>
+  * statusHistory : JSON
+  * wardMemberNotified : JSON
+  * estimatedCompletionDate : DATETIME
+  * actualCompletionDate : DATETIME
+  * repairCost : JSON
+  * contractorInfo : JSON
+  * isPublic : BOOLEAN
+  * createdAt : DATETIME
+  * updatedAt : DATETIME
+}
+
+users ||--o{ reports : "submits"
+users ||--o{ reports : "assigned_to"
+
+@enduml
+
+@startuml Email_Notification_System
+!theme plain
+title Email Notification System Flow
+
+start
+
+:System Event Triggered;
+
+switch (Event Type?)
+case (Registration)
+  :Generate Verification Code;
+  :Send Welcome Email;
+case (Password Reset)
+  :Generate Reset Token;
+  :Send Reset Link Email;
+case (Status Update)
+  :Get Report Details;
+  :Format Status Message;
+  :Send Update Email;
+case (Report Assignment)
+  :Get Assignment Details;
+  :Send Assignment Email;
+endswitch
+
+:Gmail SMTP Service;
+
+if (Email Sent Successfully?) then (Yes)
+  :Log Success;
+else (No)
+  :Log Error;
+  :Retry Mechanism;
+  if (Retry Successful?) then (No)
+    :Mark as Failed;
+    stop
+  endif
+endif
+
+:Email Delivered;
+
+stop
+
+@enduml
+
+@startuml PDF_Generation_Process
+!theme plain
+title PDF Generation Process Flow
+
+start
+
+:PDF Generation Request;
+
+if (PDF Type?) then (Citizen Report)
+  :Get Report Data from Form;
+  :Get Uploaded Image;
+else (Municipal Export)
+  :Get Report from Database;
+  :Get Stored Images;
+endif
+
+:Process Images;
+
+partition "Image Processing" {
+  :Resize Image (Max 800px);
+  :Compress to JPEG (70% quality);
+  :Convert to Base64;
+}
+
+:Create PDF Document;
+:Add Header Section;
+:Add Report Information Box;
+
+if (Has Images?) then (Yes)
+  :Add Image Section Title;
+  :Insert Compressed Image;
+  :Add Image Caption;
+endif
+
+:Add Report Details Table;
+:Add AI Analysis Section;
+:Add Municipal Assessment (if applicable);
+:Add Footer with Metadata;
+:Generate Final PDF;
+:Download PDF File;
+
+stop
+
+@enduml
+
+@startuml System_Security_Flow
+!theme plain
+title Security & Authentication Flow
+
+start
+
+:Incoming Request;
+
+:Check Authentication Header;
+
+if (Has JWT Token?) then (No)
+  :Redirect to Login;
+  stop
+endif
+
+:Verify JWT Token;
+
+if (Token Valid?) then (No)
+  :Clear Invalid Token;
+  :Return 401 Unauthorized;
+  stop
+endif
+
+:Extract User Information;
+:Check User Permissions;
+
+switch (User Role?)
+case (Citizen)
+  :Access Citizen Routes;
+case (Municipal)
+  :Access Municipal Routes;
+case (Admin)
+  :Access Admin Routes;
+endswitch
+
+if (Authorized for Resource?) then (No)
+  :Return 403 Forbidden;
+  stop
+endif
+
+:Process Authorized Request;
+:Return Response;
+
+stop
+
+@enduml
+
+@startuml Admin_Dashboard_Flow
+!theme plain
+title Admin Dashboard System Flow
+
+start
+
+:Admin Login;
+:Load Admin Dashboard;
+
+partition "Statistics Module" {
+  :Calculate Total Reports;
+  :Analyze Status Distribution;
+  :Generate Priority Breakdown;
+  :Create Ward-wise Analysis;
+}
+
+partition "User Management" {
+  :List All Users;
+  :Filter by User Type;
+  :Manage User Permissions;
+  :View User Activity;
+}
+
+partition "Report Management" {
+  :Display All Reports;
+  :Apply Filters (Status/Ward/Priority);
+  :Generate Analytics;
+  :Export Reports;
+}
+
+partition "System Settings" {
+  :Email Configuration;
+  :Database Management;
+  :System Monitoring;
+}
+
+:Real-time Updates via WebSocket;
+
+stop
+
+@enduml
+
+@startuml Complete_System_Data_Flow
+!theme plain
+title Complete System Data Flow
+
+actor "Citizen" as citizen
+actor "Municipal Member" as municipal
+actor "Admin" as admin
+
+participant "React Frontend" as frontend
+participant "Express API" as api
+participant "Authentication" as auth
+participant "Report Service" as reportSvc
+participant "Email Service" as emailSvc
+participant "MySQL Database" as db
+participant "AI Engine" as ai
+participant "Gmail SMTP" as gmail
+
+== User Authentication ==
+citizen -> frontend: Access System
+frontend -> api: Login Request
+api -> auth: Validate Credentials
+auth -> db: Check User Data
+db -> auth: User Information
+auth -> api: JWT Token
+api -> frontend: Authentication Success
+frontend -> citizen: Dashboard Access
+
+== Report Submission ==
+citizen -> frontend: Submit Report
+frontend -> api: Report Data + Image
+api -> ai: Analyze Image
+ai -> api: Damage Assessment
+api -> reportSvc: Process Report
+reportSvc -> db: Save Report
+db -> reportSvc: Confirmation
+reportSvc -> emailSvc: Send Notification
+emailSvc -> gmail: Email Delivery
+reportSvc -> api: Success Response
+api -> frontend: Report Created
+frontend -> citizen: PDF Download
+
+== Municipal Review ==
+municipal -> frontend: Review Reports
+frontend -> api: Get Reports
+api -> db: Fetch Reports
+db -> api: Report Data
+api -> frontend: Display Reports
+municipal -> frontend: Update Status
+frontend -> api: Status Change
+api -> reportSvc: Process Update
+reportSvc -> db: Update Status
+reportSvc -> emailSvc: Notify Citizen
+emailSvc -> gmail: Status Email
+reportSvc -> api: Update Success
+api -> frontend: Confirmation
+
+== Admin Analytics ==
+admin -> frontend: View Analytics
+frontend -> api: Get Statistics
+api -> db: Query All Data
+db -> api: Aggregated Data
+api -> frontend: Analytics Data
+frontend -> admin: Dashboard Display
+
+@enduml
+
+@startuml Use_Case_Diagram
+!theme plain
+title Road Damage Reporting System - Use Cases
+
+left to right direction
+
+actor "Citizen" as citizen
+actor "Municipal Member" as municipal
+actor "Admin" as admin
+actor "System" as system
+
+package "Road Damage Reporting System" {
+  
+  package "Authentication" {
+    usecase "Register Account" as UC1
+    usecase "Login" as UC2
+    usecase "Reset Password" as UC3
+    usecase "Verify Email" as UC4
+  }
+  
+  package "Report Management" {
+    usecase "Submit Damage Report" as UC5
+    usecase "Upload Images" as UC6
+    usecase "Track Complaint Status" as UC7
+    usecase "Generate PDF Report" as UC8
+    usecase "View Report History" as UC9
+  }
+  
+  package "Municipal Operations" {
+    usecase "Review Reports" as UC10
+    usecase "Approve/Reject Reports" as UC11
+    usecase "Assign Work Teams" as UC12
+    usecase "Update Work Status" as UC13
+    usecase "Export Municipal Reports" as UC14
+  }
+  
+  package "Administration" {
+    usecase "Manage Users" as UC15
+    usecase "View System Analytics" as UC16
+    usecase "Generate System Reports" as UC17
+    usecase "Configure System Settings" as UC18
+  }
+  
+  package "AI & Automation" {
+    usecase "Analyze Damage Images" as UC19
+    usecase "Classify Damage Type" as UC20
+    usecase "Estimate Repair Cost" as UC21
+    usecase "Send Email Notifications" as UC22
+  }
+}
+
+' Citizen Use Cases
+citizen --> UC1
+citizen --> UC2
+citizen --> UC3
+citizen --> UC5
+citizen --> UC6
+citizen --> UC7
+citizen --> UC8
+citizen --> UC9
+
+' Municipal Member Use Cases
+municipal --> UC2
+municipal --> UC10
+municipal --> UC11
+municipal --> UC12
+municipal --> UC13
+municipal --> UC14
+
+' Admin Use Cases
+admin --> UC2
+admin --> UC15
+admin --> UC16
+admin --> UC17
+admin --> UC18
+
+' System Use Cases
+system --> UC4
+system --> UC19
+system --> UC20
+system --> UC21
+system --> UC22
+
+' Relationships
+UC5 ..> UC6 : includes
+UC5 ..> UC19 : includes
+UC19 ..> UC20 : includes
+UC19 ..> UC21 : includes
+UC11 ..> UC22 : includes
+UC13 ..> UC22 : includes
+
+@enduml

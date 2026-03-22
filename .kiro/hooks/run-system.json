@@ -1,0 +1,5 @@
+{
+  "eventType": "userTriggered",
+  "hookAction": "askAgent",
+  "outputPrompt": "Start the road damage reporting system by running the backend server (cd backend && npm start) and the frontend development server (cd road-damage-app && npm run dev). Check if both servers start successfully and provide the URLs where they are accessible."
+}
